@@ -13,13 +13,14 @@
 #     name: python3
 # ---
 
-# %%
-from pathlib import Path
 from functools import partial
 
-import pybem as pb
+# %%
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+import pybem as pb
 
 # %%
 PATH_POLARS = "../polars"
