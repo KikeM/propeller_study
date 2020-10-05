@@ -1,0 +1,4 @@
+pybem
+jupyter
+pandas
+matplotlib
