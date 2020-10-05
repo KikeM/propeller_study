@@ -1,4 +1,5 @@
 pybem
 jupyter
+jupytext
 pandas
 matplotlib
