@@ -13,83 +13,134 @@
 #     name: python3
 # ---
 
-from functools import partial
-
 # %%
 from pathlib import Path
+from functools import partial
 
+from utils import load_polar
+
+import pybem as pb
 import numpy as np
 import pandas as pd
-import pybem as pb
+
+# %% [markdown]
+# Inputs
 
 # %%
-PATH_POLARS = "../polars"
+PATH_POLARS = Path("../polars")
+file_lift = "lift.csv"
+file_drag = "drag.csv"
+file_propeller = PATH_POLARS / "propeller1_inches.txt"
+
+PITCH = 32.4  # inches
+
+# %%
+INCH_METER = 0.0254
+PITCH = INCH_METER * PITCH  # meters
 
 # %%
 csv_reader = partial(pd.read_csv, sep=";", index_col=None)
+load_polar = partial(
+    load_polar,
+    path=PATH_POLARS,
+    file_lift=file_lift,
+    file_drag=file_drag,
+    reader=csv_reader,
+)
 
+# %% [markdown]
+# ![Blade angle definition](figures/pitch_definition.png)
 
-def load_polar(airfoil_type, which="cl"):
+# %%
+dimensions_df = pd.read_csv(filepath_or_buffer=file_propeller, sep=",")
 
-    _path_lift = Path(PATH_POLARS) / airfoil_type / "lift.csv"
-    _path_drag = Path(PATH_POLARS) / airfoil_type / "drag.csv"
+# Enforce stripped columns
+dimensions_df.columns = [col.strip() for col in dimensions_df.columns]
+dimensions_df = dimensions_df[["radius", "chord"]]
 
-    polar_cl = csv_reader(_path_lift).values
-    polar_cd = csv_reader(_path_drag).values
+# Convert to international units
+INCH_METER = 0.0254
+dimensions_df = dimensions_df.mul(INCH_METER)
 
-    polars = {"cl": polar_cl, "cd": polar_cd}
+# Name
+dimensions_df.index = ["Hub", "S1", "S2", "S3", "S4", "Tip"]
 
-    return polars[which]
+for idx, row in dimensions_df.iterrows():
 
+    r = row["radius"]
+
+    tan_theta = PITCH / (2.0 * np.pi * r)
+    theta = np.arctan(tan_theta)  # radians
+    theta = np.rad2deg(theta)  # degrees
+
+    dimensions_df.loc[idx, "theta"] = theta
+
+dimensions_df
+
+# %%
+dimensions_df.set_index("radius").plot(subplots=True)
+
+# %% [markdown]
+# Create the blade by defining the sections at each stage.
 
 # %%
 # Define known sections
 sections = [
     pb.Section(
         name="Hub",
-        r=0.3,
-        beta=60,
-        chord=0.4,
+        r=dimensions_df.loc["Hub", "radius"],
+        beta=dimensions_df.loc["Hub", "theta"],
+        chord=dimensions_df.loc["Hub", "chord"],
         airfoil=pb.Airfoil(
             polar_cl=load_polar(airfoil_type="765", which="cl"),
             polar_cd=load_polar(airfoil_type="765", which="cd"),
         ),
     ),
     pb.Section(
-        name="Station 0",
-        r=0.3,
-        beta=60,
-        chord=0.4,
+        name="S1",
+        r=dimensions_df.loc["S1", "radius"],
+        beta=dimensions_df.loc["S1", "theta"],
+        chord=dimensions_df.loc["S1", "chord"],
         airfoil=pb.Airfoil(
             polar_cl=load_polar(airfoil_type="765", which="cl"),
             polar_cd=load_polar(airfoil_type="765", which="cd"),
         ),
     ),
     pb.Section(
-        name="Station 1",
-        r=0.6,
-        beta=45,
-        chord=0.35,
+        name="S2",
+        r=dimensions_df.loc["S2", "radius"],
+        beta=dimensions_df.loc["S2", "theta"],
+        chord=dimensions_df.loc["S2", "chord"],
         airfoil=pb.Airfoil(
             polar_cl=load_polar(airfoil_type="764", which="cl"),
             polar_cd=load_polar(airfoil_type="764", which="cd"),
         ),
     ),
     pb.Section(
-        name="Station 2",
-        r=0.6,
-        beta=45,
-        chord=0.35,
+        name="S3",
+        r=dimensions_df.loc["S3", "radius"],
+        beta=dimensions_df.loc["S3", "theta"],
+        chord=dimensions_df.loc["S3", "chord"],
         airfoil=pb.Airfoil(
             polar_cl=load_polar(airfoil_type="763", which="cl"),
             polar_cd=load_polar(airfoil_type="763", which="cd"),
         ),
     ),
     pb.Section(
+        name="S4",
+        r=dimensions_df.loc["S4", "radius"],
+        beta=dimensions_df.loc["S4", "theta"],
+        chord=dimensions_df.loc["S4", "chord"],
+        airfoil=pb.Airfoil(
+            polar_cl=load_polar(airfoil_type="762", which="cl"),
+            polar_cd=load_polar(airfoil_type="762", which="cd"),
+        ),
+    ),
+    pb.Section(
         name="Tip",
-        r=1.2,
-        beta=30,
-        chord=0.2,
+        r=dimensions_df.loc["Tip", "radius"],
+        beta=dimensions_df.loc["Tip", "theta"],
+        chord=dimensions_df.loc["Tip", "chord"],
         airfoil=pb.Airfoil(
             polar_cl=load_polar(airfoil_type="762", which="cl"),
             polar_cd=load_polar(airfoil_type="762", which="cd"),
@@ -97,18 +148,57 @@ sections = [
     ),
 ]
 
+# %%
 # Define propeller
-B = 6
+B = 4
 propeller = pb.Propeller(B=B, sections=sections)
 
 # Define flow conditions and BEM method
-J = 0.2
-bem = pb.BladeElementMethod(J=J, propeller=propeller, tip_loss=False, hub_loss=False)
 
-# Solve
-bem.solve()
+results = []
+for J in np.linspace(1e-1, 1.5):
 
-# Compute forces
-CT, CQ = bem.integrate_forces()
+    pi = np.pi
+
+    _lambda = J / pi
+
+    bem = pb.BladeElementMethod(
+        _lambda=_lambda, propeller=propeller, tip_loss=True, hub_loss=False
+    )
+
+    try:
+        # Solve
+        bem.solve()
+        CT, CQ = bem.integrate_forces()
+    except:
+        CT = np.nan
+        CQ = np.nan
+
+    results.append(
+        (
+            J,
+            CT * (pi ** 3.0) / 4 / J ** 2.0,
+            CQ * (pi ** 4.0) / 4 / J ** 2.0,
+            _lambda * CT / CQ,
+        )
+    )
+
+# %%
+results_df = (
+    pd.DataFrame(results, columns=["J", "10.CT", "10.CP", "$\eta$"])
+    .dropna()
+    .set_index("J")
+)
+
+# %%
+results_df
+
+# %%
+import matplotlib.pyplot as plt
+
+# %%
+ax = results_df.plot()
+ax.axis("tight")
+ax.grid(True)
 
 # %%

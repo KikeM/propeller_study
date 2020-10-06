@@ -1,6 +1,6 @@
 def load_polar(path, file_lift, file_drag, reader, airfoil_type, which="cl"):
     """Loads the airfoil polars
-    
+
     Parameters
     ----------
     path : Path-like
@@ -10,7 +10,7 @@ def load_polar(path, file_lift, file_drag, reader, airfoil_type, which="cl"):
     airfoil_type : str
     which : str
         "cl" or "cd"
-    
+
     Returns
     -------
     np.array N x 2
