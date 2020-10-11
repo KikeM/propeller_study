@@ -254,5 +254,27 @@ fig.save("tst")
 
 
 # %%
+J = 0.6
+
+pi = np.pi
+
+_lambda = J / pi
+
+bem = pb.BladeElementMethod(
+    _lambda=_lambda, propeller=propeller, tip_loss=True, hub_loss=False
+)
+
+bem.solve()
+CT, CQ = bem.integrate_forces()
+CT = CT * (pi ** 3.0) / 4 / J ** 2.0
+CQ = CQ * (pi ** 4.0) / 4 / J ** 2.0
+
+# %%
+fig, axes = plot.subplots()
+axes.plot(bem.r_dist, bem.axial_velocity_radial_distribution)
+axes.format(xlabel = "$\\frac{r}{R}$",
+            ylabel = "$\\frac{v_a}{V_{\infty}}$", 
+            title="Axial Velocity Radial Distribution")
+fig.save("loading_distribution")
 
 # %%
