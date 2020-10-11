@@ -22,6 +22,7 @@ from utils import load_polar
 import pybem as pb
 import numpy as np
 import pandas as pd
+import proplot as plot
 
 # %% [markdown]
 # Inputs
@@ -48,9 +49,6 @@ load_polar = partial(
     reader=csv_reader,
 )
 
-# %% [markdown]
-# ![Blade angle definition](figures/pitch_definition.png)
-
 # %%
 dimensions_df = pd.read_csv(filepath_or_buffer=file_propeller, sep=",")
 
@@ -59,7 +57,6 @@ dimensions_df.columns = [col.strip() for col in dimensions_df.columns]
 dimensions_df = dimensions_df[["radius", "chord"]]
 
 # Convert to international units
-INCH_METER = 0.0254
 dimensions_df = dimensions_df.mul(INCH_METER)
 
 # Name
@@ -69,7 +66,8 @@ for idx, row in dimensions_df.iterrows():
 
     r = row["radius"]
 
-    tan_theta = PITCH / (2.0 * np.pi * r)
+    # Constant pitch law
+    tan_theta = PITCH / (2.0 * np.pi * r) 
     theta = np.arctan(tan_theta)  # radians
     theta = np.rad2deg(theta)  # degrees
 
@@ -142,15 +140,15 @@ sections = [
         beta=dimensions_df.loc["Tip", "theta"],
         chord=dimensions_df.loc["Tip", "chord"],
         airfoil=pb.Airfoil(
-            polar_cl=load_polar(airfoil_type="762", which="cl"),
-            polar_cd=load_polar(airfoil_type="762", which="cd"),
+            polar_cl=load_polar(airfoil_type="761", which="cl"),
+            polar_cd=load_polar(airfoil_type="761", which="cd"),
         ),
     ),
 ]
 
 # %%
 # Define propeller
-B = 4
+B = 2
 propeller = pb.Propeller(B=B, sections=sections)
 
 # Define flow conditions and BEM method
@@ -185,7 +183,7 @@ for J in np.linspace(1e-1, 1.5):
 
 # %%
 results_df = (
-    pd.DataFrame(results, columns=["J", "10.CT", "10.CP", "$\eta$"])
+    pd.DataFrame(results, columns=["J", "CT", "CP", "eta"])
     .dropna()
     .set_index("J")
 )
@@ -194,11 +192,59 @@ results_df = (
 results_df
 
 # %%
-import matplotlib.pyplot as plt
+G = 10
 
 # %%
-ax = results_df.plot()
-ax.axis("tight")
-ax.grid(True)
+PATH_EXPERIMENTS = Path("../experimental_results")
+path_thrust = PATH_EXPERIMENTS / 'thrust_coefficient.csv'
+path_torque = PATH_EXPERIMENTS / 'torque_coefficient.csv'
+path_efficiency = PATH_EXPERIMENTS / 'efficiency.csv'
+
+# %%
+experimental_thrust = pd.read_csv(path_thrust, sep = ';', index_col=0)
+experimental_torque = pd.read_csv(path_torque, sep = ';', index_col=0)
+experimental_efficiency = pd.read_csv(path_efficiency, sep = ";", index_col = 0)
+
+experimental_thrust = experimental_thrust.sort_index().div(G)
+experimental_torque = experimental_torque.sort_index().div(G)
+experimental_efficiency = experimental_efficiency.sort_index()
+
+# %%
+_array = [[1, 2], [3, 3]]
+fig, axes = plot.subplots(array=_array, share=0)
+
+ax = axes[0]
+ax.plot(
+    results_df.drop(["eta", "CP"], axis=1),
+)
+ax.plot(experimental_thrust)
+ax.format(
+    title="Thrust",
+    ylabel="$C_T$",
+    suptitle="Propeller Performance Comparison with Experiment",
+)
+ax.legend(labels=["Simulation", "Experiment"])
+
+ax = axes[1]
+ax.plot(
+    results_df.drop(["eta", "CT"], axis=1),
+)
+ax.plot(experimental_thrust)
+ax.format(
+    title="Torque / Power",
+    ylabel="$C_P$",
+    suptitle="Propeller Performance Comparison with Experiment",
+)
+ax.legend(labels=["Simulation", "Experiment"])
+
+
+ax = axes[-1]
+ax.plot(results_df["eta"])
+ax.plot(experimental_efficiency)
+ax.format(title="Efficiency", ylabel="$\eta$")
+ax.legend(labels=["Simulation", "Experiment"])
+
+
+# %%
 
 # %%
