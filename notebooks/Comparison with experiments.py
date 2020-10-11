@@ -172,12 +172,13 @@ for J in np.linspace(1e-1, 1.5):
         CT = np.nan
         CQ = np.nan
 
+    # Create experiments non-dimensionless coefficients
     results.append(
         (
             J,
             CT * (pi ** 3.0) / 4 / J ** 2.0,
             CQ * (pi ** 4.0) / 4 / J ** 2.0,
-            _lambda * CT / CQ,
+            _lambda * CT / CQ, # efficiency
         )
     )
 
@@ -189,10 +190,7 @@ results_df = (
 )
 
 # %%
-results_df
-
-# %%
-G = 10
+G = 9.81
 
 # %%
 PATH_EXPERIMENTS = Path("../experimental_results")
@@ -213,6 +211,9 @@ experimental_efficiency = experimental_efficiency.sort_index()
 _array = [[1, 2], [3, 3]]
 fig, axes = plot.subplots(array=_array, share=0)
 
+############
+# Thrust
+############
 ax = axes[0]
 ax.plot(
     results_df.drop(["eta", "CP"], axis=1),
@@ -225,6 +226,9 @@ ax.format(
 )
 ax.legend(labels=["Simulation", "Experiment"])
 
+############
+# Torque
+############
 ax = axes[1]
 ax.plot(
     results_df.drop(["eta", "CT"], axis=1),
@@ -237,12 +241,16 @@ ax.format(
 )
 ax.legend(labels=["Simulation", "Experiment"])
 
-
+############
+# Efficiency
+############
 ax = axes[-1]
 ax.plot(results_df["eta"])
 ax.plot(experimental_efficiency)
 ax.format(title="Efficiency", ylabel="$\eta$")
-ax.legend(labels=["Simulation", "Experiment"])
+ax.legend(labels=["Simulation", "Experiment"], frame = True)
+
+fig.save("tst")
 
 
 # %%
