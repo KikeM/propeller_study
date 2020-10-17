@@ -76,30 +76,7 @@ for idx, row in dimensions_df.iterrows():
 dimensions_df
 
 # %%
-fig, axes = plot.subplots(nrows = 2, share=0, figsize=(5,4))
-
-ax = axes[0]
-ax.plot(
-    dimensions_df.set_index("radius")["chord"],
-)
-ax.format(
-    title="Planform - Chord distribution",
-    ylabel="$c(r)$ [m]",
-    xlabel="$r$ [m]",
-    suptitle="Geometrical Definition",
-)
-
-ax = axes[1]
-ax.plot(
-    dimensions_df.set_index("radius")["theta"],
-)
-ax.format(
-    title="Twist distribution",
-    ylabel="$\\theta(r)$ [deg]",
-    xlabel="$r$ [m]",
-)
-
-
+dimensions_df.set_index("radius").plot(subplots=True)
 
 # %% [markdown]
 # Create the blade by defining the sections at each stage.
@@ -171,135 +148,104 @@ sections = [
 
 # %%
 # Define propeller
-B = 2
-propeller = pb.Propeller(B=B, sections=sections)
-
-# Define flow conditions and BEM method
+B0 = 1
+BF = 10
 
 results = []
-for J in np.linspace(1e-1, 1.5):
-
-    pi = np.pi
-
-    _lambda = J / pi
-
-    bem = pb.BladeElementMethod(
-        _lambda=_lambda, propeller=propeller, tip_loss=True, hub_loss=False
-    )
-
-    try:
-        # Solve
-        bem.solve()
-        CT, CQ = bem.integrate_forces()
-    except:
-        CT = np.nan
-        CQ = np.nan
-
-    # Create experiments non-dimensionless coefficients
-    results.append(
-        (
-            J,
-            CT * (pi ** 3.0) / 4 / J ** 2.0,
-            CQ * (pi ** 4.0) / 4 / J ** 2.0,
-            _lambda * CT / CQ, # efficiency
-        )
-    )
+for B in range(B0, BF+1):
     
-    del bem
+    propeller = pb.Propeller(B=B, sections=sections)
+
+    # Define flow conditions and BEM method
+
+    for J in np.linspace(1e-1, 1.5):
+
+        pi = np.pi
+
+        _lambda = J / pi
+
+        bem = pb.BladeElementMethod(
+            _lambda=_lambda, propeller=propeller, tip_loss=True, hub_loss=False
+        )
+
+        try:
+            # Solve
+            bem.solve()
+            CT, CQ = bem.integrate_forces()
+        except:
+            CT = np.nan
+            CQ = np.nan
+            
+        # Create experiments non-dimensionless coefficients
+        results.append(
+            (
+                B,
+                J,
+                CT * (pi ** 3.0) / 4 / J**2.0,
+                CQ * (pi ** 4.0) / 4 / J**2.0,
+                _lambda * CT / CQ,  # efficiency
+            )
+        )
+        
+        del bem
+        
+    del propeller
 
 # %%
-results_df = (
-    pd.DataFrame(results, columns=["J", "CT", "CP", "eta"])
-    .dropna()
-    .set_index("J")
-)
-
-# %%
-G = 9.81
-
-# %%
-PATH_EXPERIMENTS = Path("../experimental_results")
-path_thrust = PATH_EXPERIMENTS / 'thrust_coefficient.csv'
-path_torque = PATH_EXPERIMENTS / 'torque_coefficient.csv'
-path_efficiency = PATH_EXPERIMENTS / 'efficiency.csv'
-
-# %%
-experimental_thrust = pd.read_csv(path_thrust, sep = ';', index_col=0)
-experimental_torque = pd.read_csv(path_torque, sep = ';', index_col=0)
-experimental_efficiency = pd.read_csv(path_efficiency, sep = ";", index_col = 0)
-
-experimental_thrust = experimental_thrust.sort_index().div(G)
-experimental_torque = experimental_torque.sort_index().div(G)
-experimental_efficiency = experimental_efficiency.sort_index()
+results_df = pd.DataFrame(results, columns=["B", "J", "CT", "CP", "eta"]).dropna()
 
 # %%
 _array = [[1, 2], [3, 3]]
 fig, axes = plot.subplots(array=_array, share=0)
 
-############
-# Thrust
-############
-ax = axes[0]
-ax.plot(
-    results_df.drop(["eta", "CP"], axis=1),
-)
-ax.plot(experimental_thrust)
-ax.format(
-    title="Thrust",
-    ylabel="$C_T$",
-    suptitle="Propeller Performance Comparison with Experiment",
-)
-ax.legend(labels=["Simulation", "Experiment"])
+for B in range(B0, BF):
 
-############
-# Torque
-############
-ax = axes[1]
-ax.plot(
-    results_df.drop(["eta", "CT"], axis=1),
-)
-ax.plot(experimental_thrust)
-ax.format(
-    title="Torque / Power",
-    ylabel="$C_P$",
-    suptitle="Propeller Performance Comparison with Experiment",
-)
-ax.legend(labels=["Simulation", "Experiment"])
+    mask = results_df["B"] == B
+    _results_df = results_df.loc[mask].set_index("J").drop("B", axis=1)
 
-############
-# Efficiency
-############
-ax = axes[-1]
-ax.plot(results_df["eta"])
-ax.plot(experimental_efficiency)
-ax.format(title="Efficiency", ylabel="$\eta$")
-ax.legend(labels=["Simulation", "Experiment"], frame = True)
+    ############
+    # Thrust
+    ############
+    ax = axes[0]
+    thrust = _results_df["CT"]
+    thrust.name = str(B)
+    lines = ax.plot(
+        thrust,
+        cycle="plum",
+    )
+    ax.format(
+        title="Thrust",
+        ylabel="$C_T$",
+    )
 
-fig.save("tst")
+    ############
+    # Torque
+    ############
+    ax = axes[1]
+    torque = _results_df["CP"]
+    torque.name = str(B)
 
+    ax.plot(
+        torque,
+        cycle="plum",
+    )
+    ax.format(
+        title="Torque / Power",
+        ylabel="$C_P$",
+    )
 
-# %%
-J = 0.6
+    ############
+    # Efficiency
+    ############
+    ax = axes[-1]
+    eta = _results_df["eta"]
+    eta.name = str(B)
+    ax.plot(eta,  cycle="plum")
+    ax.format(title="Efficiency", ylabel="$\eta$")
 
-pi = np.pi
+axes[-1].legend(title="Number of Blades")
 
-_lambda = J / pi
+fig.save("Number_of_blades.pdf")
 
-bem = pb.BladeElementMethod(
-    _lambda=_lambda, propeller=propeller, tip_loss=True, hub_loss=False
-)
-
-bem.solve()
-CT, CQ = bem.integrate_forces()
-CT = CT * (pi ** 3.0) / 4 / J ** 2.0
-CQ = CQ * (pi ** 4.0) / 4 / J ** 2.0
-
-# %%
-fig, axes = plot.subplots()
-axes.plot(bem.r_dist, bem.axial_velocity_radial_distribution)
-axes.format(xlabel = "$\\frac{r}{R}$",
-            ylabel = "$\\frac{v_a}{V_{\infty}}$", 
-            title="Axial Velocity Radial Distribution")
-fig.save("loading_distribution")
 
 # %%
