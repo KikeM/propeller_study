@@ -152,7 +152,7 @@ B0 = 1
 BF = 10
 
 results = []
-for B in range(B0, BF+1):
+for B in range(B0, BF+1, 2):
     
     propeller = pb.Propeller(B=B, sections=sections)
 
@@ -247,5 +247,7 @@ axes[-1].legend(title="Number of Blades")
 
 fig.save("Number_of_blades.pdf")
 
+
+# %%
 
 # %%

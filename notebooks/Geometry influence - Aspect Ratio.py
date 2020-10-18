@@ -23,32 +23,66 @@ import pybem as pb
 import numpy as np
 import pandas as pd
 import proplot as plot
+import sympy as sy
 
 # %% [markdown]
 # Inputs
 
 # %% [markdown]
-# $H$ is the pitch, used to compute the twist distribution along the blade.
+# How to compute the Aspect Ratio of the blade.
 #
 # $$
-# H = \left(\frac{H}{D}\right) \cdot D
+# AR = R^2 / S
+# $$
+# where $S$ is the blade area, computed like:
+# $$
+# S = \int_{R_{min}}^{R} c(r)dr
 # $$
 #
-# $$
-# \theta(r) = \arctan \left(\frac{H}{2\pi r}\right)
-# $$
-#
-# If we change the radius, we also need to change the pitch $H$ according to the relation $H/D$. 
-#
-# $$
-# \theta(r) = \arctan \left(\frac{\left(\frac{H}{D}\right) \cdot D}{2\pi r}\right)
-# $$
-#
-# In terms of the radius, $D = 2R$, this would be,
-#
-# $$
-# \theta(r) = \arctan \left(\frac{\left(\frac{H}{D}\right) \cdot 2R}{2\pi r}\right) = \arctan \left(\frac{2\left( \frac{H}{D}\right) \cdot R}{2\pi r}\right)
-# $$
+# We are now going to use `sympy` to compute the area numerically for some special cases to validate our simulator. We assume the chord to vary linearly with `r`. 
+
+# %%
+r, R, R0 = sy.symbols("r, R, R0")
+a, b = sy.symbols("a, b")
+c, c0 = sy.symbols("c, c0")
+
+# %% [markdown]
+# Set up a generic linear variation
+
+# %%
+expr = a + b * r
+expr
+
+# %% [markdown]
+# Create system of equations to determine the coefficients such that they match initial and final values. 
+
+# %%
+eq1 = sy.Eq(lhs = expr.subs(r, R), rhs = c) # Tip
+eq2 = sy.Eq(lhs = expr.subs(r, R0), rhs = c0) # Hub
+
+# %% [markdown]
+# Solve the system and obtain the coefficients
+
+# %%
+sol = sy.linsolve([eq1, eq2], (a, b))
+
+a_sol , b_sol = sol.args[0]
+print("a =", a_sol)
+print("b =", b_sol)
+
+# %% [markdown]
+# Create chord variation equation and integrate to obtain blade area. 
+
+# %%
+chord = a_sol + b_sol * r
+
+area = sy.factor(sy.integrate(chord, (r, R0, R)))
+area
+
+# %%
+print(sy.pycode(area))
+
+print(sy.pycode(chord))
 
 # %%
 PATH_POLARS = Path("../polars")
@@ -96,7 +130,7 @@ def generate_sections(coefficient, dimensions_original):
     dimensions_df = dimensions_original.copy()
     
     # Scale the propeller size and compute theta
-    dimensions_df["radius"] *= coefficient
+    dimensions_df["chord"] *= coefficient
     
     R = dimensions_df["radius"].max()
     
@@ -214,12 +248,12 @@ for coeff in np.linspace(start=COEFF_0, stop=COEFF_N, num=N):
             CT = np.nan
             CQ = np.nan
 
-        R = propeller.R
+        AR = propeller.aspect_ratio
         
         # Create experiments non-dimensionless coefficients
         results.append(
             (
-                R,
+                AR,
                 J,
                 CT * (pi ** 3.0) / 4 / J ** 2.0,
                 CQ * (pi ** 4.0) / 4 / J ** 2.0,
@@ -231,7 +265,7 @@ for coeff in np.linspace(start=COEFF_0, stop=COEFF_N, num=N):
 
     del propeller
 
-results_df = pd.DataFrame(results, columns=["R", "J", "CT", "CP", "eta"]).dropna()
+results_df = pd.DataFrame(results, columns=["AR", "J", "CT", "CP", "eta"]).dropna()
 
 # %%
 results_df
@@ -240,13 +274,13 @@ results_df
 _array = [[1, 2], [3, 3]]
 fig, axes = plot.subplots(array=_array, share=0)
 
-Rs = results_df["R"].unique()
+Rs = results_df["AR"].unique()
 for R in Rs:
 
-    mask = results_df["R"] == R
-    _results_df = results_df.loc[mask].set_index("J").drop("R", axis=1)
+    mask = results_df["AR"] == AR
+    _results_df = results_df.loc[mask].set_index("J").drop("AR", axis=1)
 
-    name = np.round(R, 2)
+    name = np.round(AR, 2)
     name = str(name)
     ############
     # Thrust
@@ -288,9 +322,9 @@ for R in Rs:
     ax.plot(eta, cycle="plum")
     ax.format(title="Efficiency", ylabel="$\eta$")
 
-axes[-1].legend(title="Propeller radius [m]")
+axes[-1].legend(title="Aspect Ratio")
 
-fig.save("Radius.pdf")
+fig.save("Aspect_Ratio.pdf")
 
 
 # %%

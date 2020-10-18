@@ -101,8 +101,13 @@ ax.format(
 
 
 
+# %%
+print(dimensions_df.round(3).to_latex())
+
 # %% [markdown]
 # Create the blade by defining the sections at each stage.
+
+# %%
 
 # %%
 # Define known sections
@@ -301,5 +306,73 @@ axes.format(xlabel = "$\\frac{r}{R}$",
             ylabel = "$\\frac{v_a}{V_{\infty}}$", 
             title="Axial Velocity Radial Distribution")
 fig.save("loading_distribution")
+
+# %%
+airfoils = ["761", "762", "763", "764", "765"]
+
+fig, axes = plot.subplots(nrows=2, share=0, figsize = (4,5))
+
+# Lift
+ax = axes[0]
+for airfoil in airfoils:
+
+    cl = load_polar(airfoil_type=airfoil, which="cl")
+    cl = pd.DataFrame(data=cl[:, 1], index=cl[:, 0], columns=[airfoil])
+
+    ax.plot(cl)
+
+axes[0].format(ylabel = "$C_l$", xlabel = "$\\alpha$ [deg]")    
+# axes[0].legend(title = "Airfoil Shape")
+
+# Drag
+ax = axes[1]
+for airfoil in airfoils:
+
+    cd = load_polar(airfoil_type=airfoil, which="cd")
+    cd = pd.DataFrame(data=cd[:, 1], index=cd[:, 0], columns=[airfoil])
+
+    ax.plot(cd)
+
+axes[1].format(ylabel = "$C_d$", xlabel = "$\\alpha$ [deg]")    
+axes[1].legend(title = "Airfoil Shape")
+
+fig.save("Polars.pdf")
+
+# %%
+WHICH = "cd"
+
+alphas = []
+for airfoil in airfoils:
+    
+    cl = load_polar(airfoil_type=airfoil, which = WHICH)
+    alphas.extend(cl[:,0])
+    
+alphas = set(alphas)
+alphas = sorted(list(alphas))
+alphas = np.array(alphas)
+
+from scipy.interpolate import interp1d
+
+cls = pd.DataFrame(index= alphas, columns = airfoils)
+
+for airfoil in airfoils:
+    
+    cl = load_polar(airfoil_type=airfoil, which = WHICH)
+    cl = pd.Series(index = cl[:,0], data = cl[:,1])
+    
+    alpha_min = cl.index.min()
+    alpha_max = cl.index.max()
+    
+    mask_lb = alpha_min <= alphas
+    mask_ub = alphas <= alpha_max
+    mask = mask_lb & mask_ub
+    
+    cl = cl.reindex(alphas[mask])
+    cl = cl.interpolate(method="index")
+    
+    cls[airfoil] = cl.copy()
+    
+cls.index = np.round(cls.index, 4)
+print(cls.reindex(cls.index[::3]).to_latex())
 
 # %%
